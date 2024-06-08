@@ -2,18 +2,185 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
-
+    <title>Capture</title>
+    <link rel="stylesheet" href="index.css" />
   </head>
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
-    <video style="width: 640px; height: 480px;"></video>
+    <video id="cameraPreview" style="display: none" hidden muted></video>
+    <div class="actions">
+      <div class="settings">
+        <div class="selector-div">
+          <button id="videoSelectBtn" class="button is-text">
+            <svg viewBox="0 0 24 24">
+              <path
+                style="fill: currentColor"
+                d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2m0 14H3V5h18z"
+              ></path>
+            </svg>
+            <span id="screen-selected">Choisir un écran :</span>
+          </button>
+          <select id="screen-select"></select>
+        </div>
 
-    <button id="startBtn" class="button is-primary">Start</button>
-    <button id="stopBtn" class="button is-warning">Stop</button>
+        <div class="selector-div">
+          <button>
+            <svg focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                style="fill: currentColor"
+                d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3m5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72z"
+              ></path>
+            </svg>
+            <span id="mic-selected">Choisir un microphone</span>
+          </button>
+          <select id="audioSelect"></select>
+        </div>
 
-    <button id="videoSelectBtn" class="button is-text">Get Video Sources</button>
-    <select id="selectMenu"></select>
+        <div class="selector-div">
+          <button>
+            <svg focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+              <circle
+                cx="12"
+                cy="12"
+                r="3.2"
+                style="fill: currentColor"
+              ></circle>
+              <path
+                style="fill: currentColor"
+                d="M9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5"
+              ></path>
+            </svg>
+            <span id="camera-selected">Choisir une caméra</span>
+          </button>
+          <select id="cameraSelect"></select>
+        </div>
+
+        <button id="startBtn" class="button is-primary">Start</button>
+      </div>
+
+      <div class="recording" style="display: none">
+        <button class="rec" id="stopBtn"></button>
+        <small id="timer">00:00:00</small>
+      </div>
+    </div>
+
+    <style>
+      .selector-div {
+        display: flex;
+        position: relative;
+      }
+
+      .selector-div select {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+      }
+
+      .window {
+        height: 100px;
+        width: 3.4rem;
+        display: grid;
+        justify-content: center;
+        align-items: center;
+        border-radius: 3.4rem;
+        border: 1px solid #94949486;
+        background: #262626f9;
+        backdrop-filter: blur(100px);
+        text-align: center;
+        gap: 0rem;
+      }
+
+      .window div {
+        display: grid;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 10px;
+      }
+
+      .window div span {
+        color: #ffffff5e;
+        font-size: 14px;
+      }
+
+      .recording {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .rec {
+        margin: auto;
+        width: 40px;
+        height: 40px;
+        box-shadow: 0px 0px 12px 0px #f44336;
+        border-radius: 40px;
+        background-color: #f44336;
+      }
+
+      .rec:hover {
+        opacity: 0.7;
+      }
+
+      #timer {
+        color: grey;
+      }
+    </style>
+
+    <script>
+      const { ipcRenderer } = window.electron;
+
+      async function startCamera() {
+        const constraints = {
+          audio: false,
+          video: {
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+            frameRate: { ideal: 30 },
+          },
+        };
+        const cameraSelect = document.getElementById("cameraSelect");
+        const cameraSelected = document.getElementById("camera-selected");
+
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(
+            (device) => device.kind === "videoinput"
+          );
+
+          videoDevices.forEach((device) => {
+            const option = document.createElement("option");
+            option.value = device.deviceId;
+            option.text =
+              device.label || `Camera ${cameraSelect.options.length + 1}`;
+            cameraSelect.appendChild(option);
+          });
+
+          cameraSelected.innerHTML = reduceString(
+            cameraSelect.options[0].text,
+            22
+          );
+          constraints.video.deviceId = { exact: cameraSelect.value };
+
+          cameraSelect.onchange = () => {
+            constraints.video.deviceId.exact = cameraSelect.value;
+            ipcRenderer.send("start-camera", constraints);
+          };
+
+          constraints.video.deviceId.exact = cameraSelect.value;
+          ipcRenderer.send("start-camera", constraints);
+        } catch (error) {
+          console.error("Error accessing camera:", error);
+        }
+      }
+
+      function reduceString(str, maxLength) {
+        return str.length > maxLength
+          ? str.substring(0, maxLength) + "..."
+          : str;
+      }
+
+      startCamera();
+    </script>
   </body>
 </html>

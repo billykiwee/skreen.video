@@ -12,10 +12,22 @@
     "lint": "echo \"No linting configured\""
   },
   "keywords": [],
-  "author": {
-    "name": "Zach Doster",
-    "email": "dosterz97@gmail.com"
+  "build": {
+    "appId": "com.example.app",
+    "mac": {
+      "icon": "public/icon.png"
+    },
+    "win": {
+      "icon": "public/icon.png"
+    },
+    "linux": {
+      "icon": "public/icon.png"
+    }
   },
+  "permissions": [
+    "audioCapture",
+    "videoCapture"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@electron-forge/cli": "^6.0.5",
@@ -31,6 +43,7 @@
     "style-loader": "^3.0.0"
   },
   "dependencies": {
+    "electron-drag": "^2.0.0",
     "electron-squirrel-startup": "^1.0.0"
   }
 }

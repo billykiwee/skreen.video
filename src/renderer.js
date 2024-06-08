@@ -1,129 +1,297 @@
-/**
- * This file will automatically be loaded by webpack and run in the "renderer" context.
- * To learn more about the differences between the "main" and the "renderer" context in
- * Electron, visit:
- *
- * https://electronjs.org/docs/tutorial/application-architecture#main-and-renderer-processes
- *
- * By default, Node.js integration in this file is disabled. When enabling Node.js integration
- * in a renderer process, please be aware of potential security implications. You can read
- * more about security risks here:
- *
- * https://electronjs.org/docs/tutorial/security
- *
- * To enable Node.js integration in this file, open up `main.js` and enable the `nodeIntegration`
- * flag:
- *
- * ```
- *  // Create the browser window.
- *  mainWindow = new BrowserWindow({
- *    width: 800,
- *    height: 600,
- *    webPreferences: {
- *      nodeIntegration: true
- *    }
- *  });
- * ```
- */
+import { ipcRenderer, app, shell } from "electron";
+import { writeFile } from "fs";
 
-import './index.css';
-
-console.log('👋 This message is being logged by "renderer.js", included via webpack');
-
-import { ipcRenderer } from 'electron';
-import { writeFile } from 'fs';
+import "./index.css";
 
 let mediaRecorder;
 let recordedChunks = [];
 
-// Buttons
-const videoElement = document.querySelector('video');
+// Elements
+const videoElement = document.querySelector("video");
+const startBtn = document.getElementById("startBtn");
 
-const startBtn = document.getElementById('startBtn');
-startBtn.onclick = e => {
-  startRecording();
-  startBtn.innerText = 'Recording';
-};
+const videoSelectBtn = document.getElementById("videoSelectBtn");
+const screenSelect = document.getElementById("screen-select");
 
-const stopBtn = document.getElementById('stopBtn');
+const audioSelect = document.getElementById("audioSelect");
+const micSelected = document.getElementById("mic-selected");
 
-stopBtn.onclick = e => {
-  mediaRecorder.stop();
-  startBtn.innerText = 'Start';
-};
+const stopBtn = document.getElementById("stopBtn");
 
-const videoSelectBtn = document.getElementById('videoSelectBtn');
-videoSelectBtn.onclick = getVideoSources;
+// Event Listeners
+if (startBtn) {
+  startBtn.onclick = (e) => {
+    startRecording();
 
-const selectMenu = document.getElementById('selectMenu')
+    document.querySelector(".settings").style.display = "none";
+    document.querySelector(".recording").style.display = "flex";
 
-async function getVideoSources() {
-    const inputSources = await ipcRenderer.invoke('getSources')
-  
-    inputSources.forEach(source => {
-      const element = document.createElement("option")
-      element.value = source.id
-      element.innerHTML = source.name
-      selectMenu.appendChild(element)
+    ipcRenderer.send("update-timer");
+
+    ipcRenderer.send("edit-window", {
+      width: 80,
+      height: 200,
+      skipTaskbar: true,
+      x: 0,
+      y: 500,
     });
+  };
+}
+
+if (videoSelectBtn) {
+  getScreenSource();
+}
+
+if (stopBtn) {
+  stopBtn.onclick = (e) => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+    }
+  };
+}
+
+async function getScreenSource() {
+  try {
+    const inputSources = await ipcRenderer.invoke("getSources");
+
+    inputSources.forEach((source) => {
+      const element = document.createElement("option");
+      element.value = source.id;
+      element.innerHTML = source.name;
+
+      screenSelect.appendChild(element);
+      document.querySelector("#screen-selected").textContent = reduceString(
+        inputSources[0].name,
+        22
+      );
+    });
+
+    screenSelect.onchange = () => {
+      const selectedOption = screenSelect.options[screenSelect.selectedIndex];
+      document.querySelector("#screen-selected").textContent = reduceString(
+        selectedOption.text,
+        22
+      );
+    };
+  } catch (error) {
+    console.error("Error fetching video sources: ", error);
   }
+}
 
+async function getCameraSource() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
+  } catch (error) {
+    console.error("Error getting camera stream: ", error);
+  }
+}
 
-  async function startRecording() {
-    const screenId = selectMenu.options[selectMenu.selectedIndex].value
-    
-    // AUDIO WONT WORK ON MACOS
-    const IS_MACOS = await ipcRenderer.invoke("getOperatingSystem") === 'darwin'
-    console.log(await ipcRenderer.invoke('getOperatingSystem'))
-    const audio = !IS_MACOS ? {
-      mandatory: {
-        chromeMediaSource: 'desktop'
-      }
-    } : false
-  
-    const constraints = {
-      audio,
+async function getAudioSource() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const audioDevices = devices.filter((device) => device.kind === "audioinput");
+
+  audioDevices.forEach((device) => {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.text =
+      device.label || `Microphone ${audioSelect.options.length + 1}`;
+    audioSelect.appendChild(option);
+  });
+  micSelected.innerHTML = reduceString(audioSelect[0].text, 22);
+
+  audioSelect.onchange = () => {
+    const selectedOption = audioSelect.options[audioSelect.selectedIndex];
+    micSelected.innerHTML = reduceString(selectedOption.text, 22);
+  };
+}
+
+const reduceString = (value, maxLength) =>
+  value.length > maxLength ? value.slice(0, maxLength) + "..." : value;
+
+getAudioSource();
+
+async function startRecording() {
+  try {
+    const screenId = screenSelect.options[screenSelect.selectedIndex].value;
+    const audioId = audioSelect.options[audioSelect.selectedIndex].value;
+
+    const IS_MACOS =
+      (await ipcRenderer.invoke("getOperatingSystem")) === "darwin";
+
+    // Contraintes pour l'audio sélectionné par l'utilisateur
+    const selectedAudioConstraints = {
+      audio: {
+        deviceId: { exact: audioId },
+        channelCount: { ideal: 2 },
+        sampleRate: { ideal: 44100 },
+        sampleSize: { ideal: 16 },
+      },
+    };
+
+    // Contraintes pour la caméra
+    const cameraConstraints = {
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      },
+      audio: false,
+    };
+
+    const screenConstraints = {
+      audio: IS_MACOS ? false : selectedAudioConstraints.audio, // Utilise les contraintes audio sélectionnées par l'utilisateur, sauf si c'est macOS
       video: {
         mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: screenId
-        }
-      }
+          chromeMediaSource: "desktop",
+          chromeMediaSourceId: screenId,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          maxFrameRate: 30,
+        },
+      },
     };
-  
-    // Create a Stream
-    const stream = await navigator.mediaDevices
-      .getUserMedia(constraints);
-  
-    // Preview the source in a video element
-    videoElement.srcObject = stream;
+
+    // Créer le flux audio sélectionné par l'utilisateur
+    const selectedAudioStream = await navigator.mediaDevices.getUserMedia(
+      selectedAudioConstraints
+    );
+
+    // Créer le flux de l'écran capturé
+    const screenStream = await navigator.mediaDevices.getUserMedia(
+      screenConstraints
+    );
+
+    // Créer le flux de la caméra
+    const cameraStream = await getCameraSource(cameraConstraints);
+
+    // Créer le flux audio de l'utilisateur
+    const audioStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: audioId,
+      },
+    });
+
+    // Combiner les flux
+    const combinedStream = new MediaStream([
+      ...screenStream.getTracks(),
+      ...cameraStream.getTracks(),
+      ...audioStream.getTracks(),
+    ]);
+
+    // Afficher la prévisualisation dans un élément vidéo
+    videoElement.srcObject = combinedStream;
     await videoElement.play();
-  
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+
+    // Démarrer l'enregistrement
+    mediaRecorder = new MediaRecorder(combinedStream, {
+      mimeType: "video/webm; codecs=vp9",
+    });
     mediaRecorder.ondataavailable = onDataAvailable;
     mediaRecorder.onstop = stopRecording;
     mediaRecorder.start();
+  } catch (error) {
+    console.error("Error starting recording: ", error);
   }
-
-function onDataAvailable(e) {
-    recordedChunks.push(e.data);
 }
 
+function onDataAvailable(e) {
+  recordedChunks.push(e.data);
+}
 
 async function stopRecording() {
-    videoElement.srcObject = null
+  try {
+    videoElement.srcObject = null;
 
     const blob = new Blob(recordedChunks, {
-      type: 'video/webm; codecs=vp9'
+      type: "video/webm; codecs=vp9",
     });
-  
-    const buffer = Buffer.from(await blob.arrayBuffer());
-    recordedChunks = []
 
-    const { canceled, filePath } =  await ipcRenderer.invoke('showSaveDialog')
-    if(canceled) return
-  
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    recordedChunks = [];
+
+    const { canceled, filePath } = await ipcRenderer.invoke("showSaveDialog");
+    if (canceled) return;
+
     if (filePath) {
-      writeFile(filePath, buffer, () => console.log('video saved successfully!'));
+      writeFile(filePath, buffer, async () => {
+        console.log("video saved successfully!");
+
+        await shell.openExternal(`file://${filePath}`);
+
+        ipcRenderer.send("close-app");
+      });
     }
+  } catch (error) {
+    console.error("Error stopping recording: ", error);
   }
+}
+
+async function startCamera() {
+  const constraints = {
+    audio: false,
+    video: {
+      width: { ideal: 3840 },
+      height: { ideal: 2160 },
+      frameRate: { ideal: 30 },
+    },
+  };
+  const cameraSelect = document.getElementById("cameraSelect");
+
+  const cameraSelected = document.querySelector("#camera-selected");
+
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(
+      (device) => device.kind === "videoinput"
+    );
+
+    videoDevices.forEach((device) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.text = device.label || `Camera ${cameraSelect.options.length + 1}`;
+      cameraSelect.appendChild(option);
+    });
+
+    cameraSelected.innerHTML = reduceString(cameraSelect[0].text, 22);
+
+    constraints.video = { deviceId: { exact: cameraSelect.value } };
+
+    cameraSelect.onchange = () => {
+      constraints.video.deviceId.exact = cameraSelect.value;
+      ipcRenderer.send("start-camera", constraints);
+      //startCameraStream(constraints);
+      //ipcRenderer.send("start-camera", constraints);
+
+      const selectedOption = cameraSelect.options[cameraSelect.selectedIndex];
+
+      micSelected.innerHTML = reduceString(selectedOption.text, 22);
+    };
+
+    constraints.video.deviceId.exact = cameraSelect.value;
+    ipcRenderer.send("start-camera", constraints);
+    // startCameraStream(constraints);
+    //ipcRenderer.send("start-camera", constraints);
+  } catch (error) {
+    console.error("Error accessing camera:", error);
+  }
+}
+startCamera();
+
+async function startCameraStream(constraints) {
+  try {
+    /*     const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const cameraPreview = document.querySelector("#cameraPreview");
+
+    if (cameraPreview) {
+      cameraPreview.srcObject = stream;
+    } else {
+      console.error("Camera preview element not found.");
+    } */
+  } catch (error) {
+    console.error("Error accessing camera:", error);
+  }
+}
