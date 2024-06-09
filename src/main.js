@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain } from "electron";
-const path = require("path");
 const { screen } = require("electron");
 
 if (require("electron-squirrel-startup")) {
@@ -7,15 +6,16 @@ if (require("electron-squirrel-startup")) {
 }
 
 let mainWindow;
+let timerInterval;
 
 const createWindow = () => {
   let config = {
-    width: 340,
+    width: 280,
     height: 380,
+    x: 2000,
+    y: 0,
     webPreferences: {
-      x: 2000,
-      y: 0,
-      preload: "src/preload.js",
+      preload: "src/index.html",
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
@@ -27,7 +27,7 @@ const createWindow = () => {
     resizable: false,
     alwaysOnTop: true,
     fullscreenable: true,
-    movable: false,
+    movable: true,
     skipTaskbar: true,
     frame: true,
     transparent: true,
@@ -55,7 +55,7 @@ const createWindow = () => {
 
     timerInterval = setInterval(() => {
       // Formatage des heures, minutes et secondes pour qu'ils aient toujours deux chiffres
-      let formattedHours = hours.toString().padStart(2, "0");
+      // let formattedHours = hours.toString().padStart(2, "0");
       let formattedMinutes = minutes.toString().padStart(2, "0");
       let formattedSeconds = seconds.toString().padStart(2, "0");
 
@@ -76,10 +76,16 @@ const createWindow = () => {
       }
 
       mainWindow.webContents.executeJavaScript(`
-            document.querySelector("#timer").innerHTML = "${`${formattedHours}:${formattedMinutes}:${formattedSeconds}`}";
+            document.querySelector("#timer").innerHTML = "${`${formattedMinutes}:${formattedSeconds}`}";
 
         `);
     }, 1000);
+
+    return timerInterval;
+  });
+
+  ipcMain.on("stop-timer", (event, time) => {
+    clearInterval(timerInterval);
   });
 
   ipcMain.on("edit-window", (event, config) => {
@@ -91,6 +97,8 @@ const createWindow = () => {
 
   mainWindow.setAlwaysOnTop(true, "screen-saver", 1);
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  mainWindow.webContents.reloadIgnoringCache();
 };
 
 let cameraWindow;
@@ -138,8 +146,6 @@ function createCameraWindow() {
     cameraWindow.webContents.send("start-camera", constraints);
   });
 }
-
-let timerInterval;
 
 ipcMain.on("record-stop-request", () => {
   // Envoyer un message au processus renderer pour lui dire d'arrêter l'enregistrement

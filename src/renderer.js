@@ -18,6 +18,12 @@ const micSelected = document.getElementById("mic-selected");
 
 const stopBtn = document.getElementById("stopBtn");
 
+const closeAppBtn = document.querySelector("#close-app");
+
+if (closeAppBtn) {
+  closeAppBtn.onclick = () => ipcRenderer.send("close-app");
+}
+
 // Event Listeners
 if (startBtn) {
   startBtn.onclick = (e) => {
@@ -29,8 +35,8 @@ if (startBtn) {
     ipcRenderer.send("update-timer");
 
     ipcRenderer.send("edit-window", {
-      width: 80,
-      height: 200,
+      width: 68,
+      height: 140,
       skipTaskbar: true,
       x: 0,
       y: 500,
@@ -46,6 +52,8 @@ if (stopBtn) {
   stopBtn.onclick = (e) => {
     if (mediaRecorder) {
       mediaRecorder.stop();
+
+      ipcRenderer.send("stop-timer");
     }
   };
 }
@@ -100,11 +108,11 @@ async function getAudioSource() {
       device.label || `Microphone ${audioSelect.options.length + 1}`;
     audioSelect.appendChild(option);
   });
-  micSelected.innerHTML = reduceString(audioSelect[0].text, 22);
+  micSelected.innerHTML = reduceString(audioSelect[0].text, 16);
 
   audioSelect.onchange = () => {
     const selectedOption = audioSelect.options[audioSelect.selectedIndex];
-    micSelected.innerHTML = reduceString(selectedOption.text, 22);
+    micSelected.innerHTML = reduceString(selectedOption.text, 16);
   };
 }
 
@@ -213,7 +221,10 @@ async function stopRecording() {
     recordedChunks = [];
 
     const { canceled, filePath } = await ipcRenderer.invoke("showSaveDialog");
-    if (canceled) return;
+    if (canceled) {
+      ipcRenderer.send("update-timer");
+      return;
+    }
 
     if (filePath) {
       writeFile(filePath, buffer, async () => {
@@ -255,34 +266,35 @@ async function startCamera() {
       cameraSelect.appendChild(option);
     });
 
-    cameraSelected.innerHTML = reduceString(cameraSelect[0].text, 22);
+    cameraSelected.innerHTML = reduceString(cameraSelect[0].text, 16);
 
     constraints.video = { deviceId: { exact: cameraSelect.value } };
 
     cameraSelect.onchange = () => {
       constraints.video.deviceId.exact = cameraSelect.value;
-      ipcRenderer.send("start-camera", constraints);
-      //startCameraStream(constraints);
-      //ipcRenderer.send("start-camera", constraints);
+
+      startCameraStream(constraints);
+      //  ipcRenderer.send("start-camera", constraints);
 
       const selectedOption = cameraSelect.options[cameraSelect.selectedIndex];
 
-      micSelected.innerHTML = reduceString(selectedOption.text, 22);
+      cameraSelected.innerHTML = reduceString(selectedOption.text, 16);
     };
 
     constraints.video.deviceId.exact = cameraSelect.value;
-    ipcRenderer.send("start-camera", constraints);
-    // startCameraStream(constraints);
-    //ipcRenderer.send("start-camera", constraints);
+
+    startCameraStream(constraints);
+    // ipcRenderer.send("start-camera", constraints);
   } catch (error) {
     console.error("Error accessing camera:", error);
   }
 }
+
 startCamera();
 
 async function startCameraStream(constraints) {
   try {
-    /*     const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     const cameraPreview = document.querySelector("#cameraPreview");
 
@@ -290,7 +302,7 @@ async function startCameraStream(constraints) {
       cameraPreview.srcObject = stream;
     } else {
       console.error("Camera preview element not found.");
-    } */
+    }
   } catch (error) {
     console.error("Error accessing camera:", error);
   }
