@@ -1,7 +1,11 @@
-import { ipcRenderer, app, shell } from "electron";
-import { writeFile } from "fs";
-
-import "./index.css";
+const {
+  ipcRenderer,
+  app,
+  shell,
+  electron,
+  desktopCapturer,
+} = require("electron");
+const { writeFile } = require("fs");
 
 let mediaRecorder;
 let recordedChunks = [];
@@ -90,7 +94,7 @@ async function getCameraSource() {
   try {
     return await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: false,
+      audio: true,
     });
   } catch (error) {
     console.error("Error getting camera stream: ", error);
@@ -121,8 +125,26 @@ const reduceString = (value, maxLength) =>
 
 getAudioSource();
 
+async function getScreenSources() {
+  try {
+    const inputSources = await desktopCapturer.getSources({
+      types: ["window", "screen", "audio"],
+    });
+    return inputSources;
+  } catch (error) {
+    console.error("Error fetching sources:", error);
+    return [];
+  }
+}
+
 async function startRecording() {
   try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Obtenez les sources
+    const sources = await getScreenSources();
+    console.log(sources);
+
     const screenId = screenSelect.options[screenSelect.selectedIndex].value;
     const audioId = audioSelect.options[audioSelect.selectedIndex].value;
 
@@ -150,7 +172,7 @@ async function startRecording() {
     };
 
     const screenConstraints = {
-      audio: IS_MACOS ? false : selectedAudioConstraints.audio, // Utilise les contraintes audio sélectionnées par l'utilisateur, sauf si c'est macOS
+      audio: false,
       video: {
         mandatory: {
           chromeMediaSource: "desktop",
@@ -187,6 +209,7 @@ async function startRecording() {
       ...screenStream.getTracks(),
       ...cameraStream.getTracks(),
       ...audioStream.getTracks(),
+      ...selectedAudioStream.getTracks(),
     ]);
 
     // Afficher la prévisualisation dans un élément vidéo
@@ -297,6 +320,8 @@ async function startCameraStream(constraints) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     const cameraPreview = document.querySelector("#cameraPreview");
+
+    console.log(cameraPreview);
 
     if (cameraPreview) {
       cameraPreview.srcObject = stream;

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>📹</title>
+
     <style>
       * {
         margin: 0;
@@ -98,7 +99,7 @@
         document.querySelector(".editPreview").style.display = "flex";
 
         document.querySelector("#round").onclick = () => {
-          round = !round; // Inverse la valeur de round
+          round = !round;
 
           document.querySelector("#cameraPreview").style.borderRadius = !round
             ? "4rem"

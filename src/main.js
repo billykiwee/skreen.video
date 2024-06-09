@@ -1,4 +1,11 @@
-import { app, BrowserWindow, dialog, desktopCapturer, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  desktopCapturer,
+  ipcMain,
+  session,
+} from "electron";
 const { screen } = require("electron");
 
 if (require("electron-squirrel-startup")) {
@@ -19,12 +26,16 @@ const createWindow = () => {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
+
+      permissions: {
+        audioCapture: true,
+      },
     },
 
     transparent: true,
 
     visibleOnAllWorkspaces: true,
-    resizable: false,
+    //resizable: false,
     alwaysOnTop: true,
     fullscreenable: true,
     movable: true,
@@ -38,7 +49,7 @@ const createWindow = () => {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   ipcMain.on("close-window", () => {
     mainWindow.close();
@@ -110,6 +121,7 @@ function createCameraWindow() {
       preload: "src/camera.html",
       contextIsolation: true,
       audio: false,
+      nodeIntegration: true,
     },
 
     visibleOnAllWorkspaces: true,
@@ -129,7 +141,7 @@ function createCameraWindow() {
   cameraWindow = new BrowserWindow(config);
 
   cameraWindow.loadFile("src/camera.html");
-  // cameraWindow.webContents.openDevTools();
+  ///  cameraWindow.webContents.openDevTools();
 
   cameraWindow.setAlwaysOnTop(true, "screen-saver", 1);
   cameraWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -184,7 +196,15 @@ app.on("activate", () => {
 });
 
 ipcMain.handle("getSources", async () => {
-  return await desktopCapturer.getSources({ types: ["window", "screen"] });
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["window", "screen", "audio"],
+    });
+    return sources;
+  } catch (error) {
+    console.error("Error getting sources:", error);
+    return [];
+  }
 });
 
 ipcMain.handle("getCameraSources", async () => {
