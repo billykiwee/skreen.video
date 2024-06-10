@@ -35,7 +35,7 @@ const createWindow = () => {
     transparent: true,
 
     visibleOnAllWorkspaces: true,
-    //resizable: false,
+    resizable: false,
     alwaysOnTop: true,
     fullscreenable: true,
     movable: true,
@@ -196,15 +196,9 @@ app.on("activate", () => {
 });
 
 ipcMain.handle("getSources", async () => {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ["window", "screen", "audio"],
-    });
-    return sources;
-  } catch (error) {
-    console.error("Error getting sources:", error);
-    return [];
-  }
+  return await desktopCapturer.getSources({
+    types: ["window", "screen", "audio"],
+  });
 });
 
 ipcMain.handle("getCameraSources", async () => {

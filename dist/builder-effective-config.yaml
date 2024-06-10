@@ -1,0 +1,12 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.example.app
+mac:
+  icon: public/icon.png
+win:
+  icon: public/icon.png
+linux:
+  icon: public/icon.png
+files: []
+electronVersion: 23.1.3

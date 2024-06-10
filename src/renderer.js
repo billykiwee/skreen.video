@@ -112,11 +112,11 @@ async function getAudioSource() {
       device.label || `Microphone ${audioSelect.options.length + 1}`;
     audioSelect.appendChild(option);
   });
-  micSelected.innerHTML = reduceString(audioSelect[0].text, 16);
+  micSelected.innerHTML = reduceString(audioSelect[0].text, 22);
 
   audioSelect.onchange = () => {
     const selectedOption = audioSelect.options[audioSelect.selectedIndex];
-    micSelected.innerHTML = reduceString(selectedOption.text, 16);
+    micSelected.innerHTML = reduceString(selectedOption.text, 22);
   };
 }
 
@@ -127,9 +127,7 @@ getAudioSource();
 
 async function getScreenSources() {
   try {
-    const inputSources = await desktopCapturer.getSources({
-      types: ["window", "screen", "audio"],
-    });
+    const inputSources = await ipcRenderer.invoke("getSources");
     return inputSources;
   } catch (error) {
     console.error("Error fetching sources:", error);
@@ -139,40 +137,22 @@ async function getScreenSources() {
 
 async function startRecording() {
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    // Obtenez les sources
-    const sources = await getScreenSources();
-    console.log(sources);
+    // Ensure screenSelect and audioSelect have valid selections
+    if (!screenSelect.options.length || !audioSelect.options.length) {
+      throw new Error("Please select both screen and audio sources.");
+    }
 
     const screenId = screenSelect.options[screenSelect.selectedIndex].value;
     const audioId = audioSelect.options[audioSelect.selectedIndex].value;
 
+    if (!screenId || !audioId) {
+      throw new Error("Invalid screen or audio source selected.");
+    }
+
     const IS_MACOS =
       (await ipcRenderer.invoke("getOperatingSystem")) === "darwin";
 
-    // Contraintes pour l'audio sélectionné par l'utilisateur
-    const selectedAudioConstraints = {
-      audio: {
-        deviceId: { exact: audioId },
-        channelCount: { ideal: 2 },
-        sampleRate: { ideal: 44100 },
-        sampleSize: { ideal: 16 },
-      },
-    };
-
-    // Contraintes pour la caméra
-    const cameraConstraints = {
-      video: {
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
-      },
-      audio: false,
-    };
-
     const screenConstraints = {
-      audio: false,
       video: {
         mandatory: {
           chromeMediaSource: "desktop",
@@ -182,41 +162,38 @@ async function startRecording() {
           maxFrameRate: 30,
         },
       },
+      audio: false,
     };
 
-    // Créer le flux audio sélectionné par l'utilisateur
-    const selectedAudioStream = await navigator.mediaDevices.getUserMedia(
-      selectedAudioConstraints
-    );
+    const selectedAudioConstraints = {
+      audio: {
+        deviceId: { exact: audioId },
+        sampleRate: { ideal: 48_000 }, // Augmenter à 96000 Hz pour une meilleure qualité
+        sampleSize: { ideal: 16 },
+      },
+    };
 
-    // Créer le flux de l'écran capturé
+    // Get screen stream
     const screenStream = await navigator.mediaDevices.getUserMedia(
       screenConstraints
     );
 
-    // Créer le flux de la caméra
-    const cameraStream = await getCameraSource(cameraConstraints);
+    // Get user selected audio stream
+    const selectedAudioStream = await navigator.mediaDevices.getUserMedia(
+      selectedAudioConstraints
+    );
 
-    // Créer le flux audio de l'utilisateur
-    const audioStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: audioId,
-      },
-    });
-
-    // Combiner les flux
+    // Combine the screen and audio streams
     const combinedStream = new MediaStream([
       ...screenStream.getTracks(),
-      ...cameraStream.getTracks(),
-      ...audioStream.getTracks(),
       ...selectedAudioStream.getTracks(),
     ]);
 
-    // Afficher la prévisualisation dans un élément vidéo
+    // Display the preview in a video element
     videoElement.srcObject = combinedStream;
     await videoElement.play();
 
-    // Démarrer l'enregistrement
+    // Start recording
     mediaRecorder = new MediaRecorder(combinedStream, {
       mimeType: "video/webm; codecs=vp9",
     });
@@ -297,7 +274,7 @@ async function startCamera() {
       constraints.video.deviceId.exact = cameraSelect.value;
 
       startCameraStream(constraints);
-      //  ipcRenderer.send("start-camera", constraints);
+      ipcRenderer.send("start-camera", constraints);
 
       const selectedOption = cameraSelect.options[cameraSelect.selectedIndex];
 
@@ -307,7 +284,7 @@ async function startCamera() {
     constraints.video.deviceId.exact = cameraSelect.value;
 
     startCameraStream(constraints);
-    // ipcRenderer.send("start-camera", constraints);
+    ipcRenderer.send("start-camera", constraints);
   } catch (error) {
     console.error("Error accessing camera:", error);
   }
